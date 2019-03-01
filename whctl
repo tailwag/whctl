@@ -1,0 +1,61 @@
+#!/bin/bash 
+
+# whctl - Devin Shoemaker 2018
+# v0.0.1 - 2019-03-01
+# command line utility for retrieving and setting 
+# cpanel and whm account information
+
+
+accountInfo() {
+	if [[ "x${2}" == "x" ]]; then 
+		userName=$(pwd | awk -F "/" '{print $3}')
+	fi
+	userCheck=$(cat /etc/userdomains | awk '{print $2}' | sort -u | grep $userName)
+	if [[ "x${userCheck}" == "x" ]]; then 
+		printf "\e[1;31m --VALID USER NOT FOUND-- \e[0m\n"
+	else
+		acctInfo=$(whmapi1 accountsummary user=${userName} | sed '/^$/d')
+		addonDoms=$(uapi --user=${userName} DomainInfo list_domains --output=xml\
+			| grep "<addon_domains>" | sed 's:</\?addon_domains>::g;s:\ ::g')
+		subDoms=$(uapi --user=${userName} DomainInfo list_domains --output=xml\
+			| grep "<sub_domains>" | sed 's:</\?sub_domains>::g;s:\ ::g')
+		formatStr='%-16s: %2s\n'
+
+		printf "$formatStr" "User" "$userName"
+		printf "$formatStr" "IP Address" "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "ip:" | tail -n1)"
+		printf "$formatStr" "Domain" "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "domain:" | tail -n1)"
+		COUNT=1
+		for domain in ${addonDoms}; do 
+			if [[ ${COUNT} == 1 ]]; then
+				printf "$formatStr" "Addon Domains" "${domain}"
+			else	
+				printf "$formatStr" " " "${domain}"
+			fi
+			((COUNT++))
+		done
+		COUNT=1
+		for domain in ${subDoms}; do 
+			if [[ ${COUNT} == 1 ]]; then
+				printf "$formatStr" "Sub Domains" "${domain}"
+			else	
+				printf "$formatStr" " " "${domain}"
+			fi
+			((COUNT++))
+		done
+		printf "\n"
+		printf "$formatStr" "Owner" "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "owner:" | tail -n1)"
+		printf "$formatStr" "Plan" "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "plan:" | tail -n1)"
+		printf "\n"
+		printf "$formatStr" "Disk Usage" "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "diskused:" | tail -n1)"
+		printf "$formatStr" "iNode Usage" "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "inodesused:" | tail -n1)"
+		if [[ "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "suspended:" | tail -n1)" == "1" ]]; then 
+			printf "\n\e[1;31m--ACCOUNT IS SUSPENDED--\e[0m\n"
+			printf "$(echo $acctInfo | tr ' ' '\n' | grep -A1 "suspendreason:" | tail -n1)\n"
+		fi
+	fi
+}
+case "$1" in 
+	-i|--info)
+		accountInfo
+	;;
+esac
